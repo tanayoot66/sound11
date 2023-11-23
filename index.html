@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combine WAV Files</title>
+</head>
+
+<body>
+    <input type="file" id="wavFileInput" accept=".wav" multiple>
+    <button onclick="processWavFiles()">Combine WAV Files</button>
+    <div id="fileDetails"></div>
+    <a id="downloadLink" style="display: none;">Download Combined Bin File</a>
+    <script>
+        function processWavFiles() {
+            const fileInput = document.getElementById('wavFileInput');
+            const files = fileInput.files;
+
+            if (files.length > 0) {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const channels = [];
+                let totalSize = 0;
+
+                function processFile(index) {
+                    if (index < files.length) {
+                        const file = files[index];
+                        const reader = new FileReader();
+
+                        reader.onload = function (e) {
+                            const arrayBuffer = e.target.result;
+                            audioContext.decodeAudioData(arrayBuffer, function (buffer) {
+                                channels.push(buffer.getChannelData(0));
+                                totalSize += buffer.length;
+                                displayFileDetails(file, buffer);
+                                processFile(index + 1);
+                            });
+                        };
+
+                        reader.readAsArrayBuffer(file);
+                    } else {
+                        combineAndExport(channels, totalSize);
+                    }
+                }
+
+                processFile(0);
+            }
+        }
+
+        function displayFileDetails(file, buffer) {
+            const detailsContainer = document.getElementById('fileDetails');
+            detailsContainer.innerHTML += `<p>${file.name} - ${buffer.numberOfChannels} Channels, ${buffer.sampleRate} Hz, ${buffer.bitsPerSample} bits per sample</p>`;
+        }
+
+        function combineAndExport(channels, totalSize) {
+            const combinedData = new Float32Array(totalSize);
+            let offset = 0;
+
+            channels.forEach(function (channel) {
+                combinedData.set(channel, offset);
+                offset += channel.length;
+            });
+
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = audioContext.createBuffer(1, totalSize, audioContext.sampleRate);
+            audioBuffer.copyToChannel(combinedData, 0);
+
+            const pcmData = new Int16Array(totalSize);
+            for (let i = 0; i < totalSize; i++) {
+                pcmData[i] = combinedData[i] * 0x7FFF; // Convert float to 16-bit PCM
+            }
+
+            const binArray = new Uint8Array(pcmData.buffer);
+            const binBlob = new Blob([binArray], { type: 'application/octet-stream' });
+
+            if (binBlob.size > 4 * 1024 * 1024) {
+                alert('Combined bin file exceeds 4MB limit. Please reduce the input WAV files.');
+            } else {
+                const binURL = URL.createObjectURL(binBlob);
+                const downloadLink = document.getElementById('downloadLink');
+                downloadLink.href = binURL;
+                downloadLink.download = 'combined.bin';
+                downloadLink.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+
+</html>
