@@ -13,43 +13,86 @@
     <div id="fileDetails"></div>
     <a id="downloadLink" style="display: none;">Download Combined Bin File</a>
     <script>
+        async function calculateStartOffset(file, files) {
+            let totalSize = 0;
+            const promises = [];
+
+            for (let i = 0; i < files.length; i++) {
+                if (files[i] === file) {
+                    break;
+                }
+
+                const arrayBuffer = await readFileAsArrayBuffer(files[i]);
+
+                promises.push(
+                    new Promise((resolve, reject) => {
+                        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        audioContext.decodeAudioData(arrayBuffer, (tempBuffer) => {
+                            totalSize += tempBuffer.length;
+                            resolve();
+                        }, reject);
+                    })
+                );
+            }
+
+            return Promise.all(promises).then(() => totalSize);
+        }
+
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    resolve(e.target.result);
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function displayFileDetails(file, buffer, startOffset, endOffset) {
+            const detailsContainer = document.getElementById('fileDetails');
+            const channels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const bitDepth = buffer.bitsPerSample;
+
+            detailsContainer.innerHTML += `<p>${file.name} - ${channels} Channel(s), ${sampleRate} Hz, ${bitDepth} bits per sample</p>`;
+            detailsContainer.innerHTML += `Start Offset: ${startOffset}, End Offset: ${endOffset} (${formatBytes(endOffset - startOffset)})<br>`;
+        }
+
+        function processFile(index, files, channels, totalSize) {
+            if (index < files.length) {
+                const file = files[index];
+                const reader = new FileReader();
+
+                reader.onload = async function (e) {
+                    const arrayBuffer = e.target.result;
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                    audioContext.decodeAudioData(arrayBuffer, async function (buffer) {
+                        channels.push(buffer.getChannelData(0));
+                        const startOffset = await calculateStartOffset(file, files);
+                        const endOffset = startOffset + buffer.length;
+                        displayFileDetails(file, buffer, startOffset, endOffset);
+                        processFile(index + 1, files, channels, totalSize + buffer.length);
+                    });
+                };
+
+                reader.readAsArrayBuffer(file);
+            } else {
+                combineAndExport(channels, totalSize);
+            }
+        }
+
         function processWavFiles() {
             const fileInput = document.getElementById('wavFileInput');
             const files = fileInput.files;
 
             if (files.length > 0) {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const channels = [];
-                let totalSize = 0;
+                const totalSize = 0;
 
-                function processFile(index) {
-                    if (index < files.length) {
-                        const file = files[index];
-                        const reader = new FileReader();
-
-                        reader.onload = function (e) {
-                            const arrayBuffer = e.target.result;
-                            audioContext.decodeAudioData(arrayBuffer, function (buffer) {
-                                channels.push(buffer.getChannelData(0));
-                                totalSize += buffer.length;
-                                displayFileDetails(file, buffer);
-                                processFile(index + 1);
-                            });
-                        };
-
-                        reader.readAsArrayBuffer(file);
-                    } else {
-                        combineAndExport(channels, totalSize);
-                    }
-                }
-
-                processFile(0);
+                processFile(0, files, channels, totalSize);
             }
-        }
-
-        function displayFileDetails(file, buffer) {
-            const detailsContainer = document.getElementById('fileDetails');
-            detailsContainer.innerHTML += `<p>${file.name} - ${buffer.numberOfChannels} Channels, ${buffer.sampleRate} Hz, ${buffer.bitsPerSample} bits per sample</p>`;
         }
 
         function combineAndExport(channels, totalSize) {
@@ -82,6 +125,12 @@
                 downloadLink.download = 'combined.bin';
                 downloadLink.style.display = 'block';
             }
+        }
+
+        function formatBytes(bytes) {
+            const kb = bytes / 1024;
+            const mb = kb / 1024;
+            return mb.toFixed(2) + " MB";
         }
     </script>
 </body>
