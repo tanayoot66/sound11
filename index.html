@@ -5,14 +5,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Combine WAV Files</title>
+
+    <!-- FilePond CSS -->
+    <link href="https://unpkg.com/filepond/dist/filepond.css" rel="stylesheet">
 </head>
 
 <body>
-    <input type="file" id="wavFileInput" accept=".wav" multiple>
+    <div class="filepond" id="filepond" Multiple></div>
     <button onclick="processWavFiles()">Combine WAV Files</button>
     <div id="fileDetails"></div>
     <a id="downloadLink" style="display: none;">Download Combined Bin File</a>
+
+    <!-- FilePond JavaScript -->
+    <script src="https://unpkg.com/filepond/dist/filepond.js"></script>
+    <!-- FilePond File Validate Type Plugin JavaScript -->
+    <script
+        src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
+
     <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            FilePond.registerPlugin(FilePondPluginFileValidateType);
+
+            const pond = FilePond.create(document.getElementById('filepond'), {
+                acceptedFileTypes: ['audio/wav'],
+                labelIdle: 'Drag & Drop your WAV files or <span class="filepond--label-action">Browse</span>',
+                allowMultiple: true, // เปิดใช้งานการอัปโหลดหลายไฟล์
+            });
+
+            pond.on('addfile', (error, file) => {
+                if (!error) {
+                    // File is successfully added, proceed with processing
+                    const files = pond.getFiles().map(file => file.file);
+                    processFile(0, files, [], 0);
+                }
+            });
+        });
+
+        // รหัส JavaScript ต่อไปนี้ไม่ได้รับการเปลี่ยนแปลง
         async function calculateStartOffset(file, files) {
             let totalSize = 0;
             const promises = [];
@@ -49,15 +78,38 @@
             });
         }
 
-        function displayFileDetails(file, buffer, startOffset, endOffset) {
+        async function calculateBitsPerSample(file) {
+            const arrayBuffer = await readFileAsArrayBuffer(file);
+            const view = new DataView(arrayBuffer);
+
+            // The byte offset for bits per sample in the WAV file header is usually 34 or 35
+            const bitsPerSample = view.getUint16(34, true) || view.getUint16(35, true);
+
+            return bitsPerSample;
+        }
+
+        // ประกาศตัวแปรเพื่อเก็บข้อมูลที่ได้แสดงไปแล้ว
+        const displayedFiles = new Set();
+
+        function displayFileDetails(file, buffer, startOffset, endOffset, bitsPerSample) {
             const detailsContainer = document.getElementById('fileDetails');
             const channels = buffer.numberOfChannels;
             const sampleRate = buffer.sampleRate;
-            const bitDepth = buffer.bitsPerSample;
+            const duration = buffer.duration;
 
-            detailsContainer.innerHTML += `<p>${file.name} - ${channels} Channel(s), ${sampleRate} Hz, ${bitDepth} bits per sample</p>`;
-            detailsContainer.innerHTML += `Start Offset: ${startOffset}, End Offset: ${endOffset} (${formatBytes(endOffset - startOffset)})<br>`;
+            // สร้าง key เพื่อตรวจสอบว่าไฟล์นี้ได้แสดงข้อมูลไปแล้วหรือยัง
+            const fileKey = `${file.name}-${channels}-${sampleRate}-${bitsPerSample}-${duration}`;
+
+            if (!displayedFiles.has(fileKey)) {
+                detailsContainer.innerHTML += `<p>${file.name} - ${channels} Channel(s), ${sampleRate} Hz, ${bitsPerSample} bits per sample, Duration: ${duration.toFixed(2)} seconds</p>`;
+                detailsContainer.innerHTML += `Start Offset: ${startOffset}, End Offset: ${endOffset} (${formatBytes(endOffset - startOffset)})<br>`;
+
+                // เพิ่ม key เข้าไปใน Set เพื่อระบุว่าไฟล์นี้ได้แสดงข้อมูลไปแล้ว
+                displayedFiles.add(fileKey);
+            }
         }
+
+
 
         function processFile(index, files, channels, totalSize) {
             if (index < files.length) {
@@ -72,7 +124,8 @@
                         channels.push(buffer.getChannelData(0));
                         const startOffset = await calculateStartOffset(file, files);
                         const endOffset = startOffset + buffer.length;
-                        displayFileDetails(file, buffer, startOffset, endOffset);
+                        const bitsPerSample = await calculateBitsPerSample(file);
+                        displayFileDetails(file, buffer, startOffset, endOffset, bitsPerSample);
                         processFile(index + 1, files, channels, totalSize + buffer.length);
                     });
                 };
@@ -84,8 +137,8 @@
         }
 
         function processWavFiles() {
-            const fileInput = document.getElementById('wavFileInput');
-            const files = fileInput.files;
+            const pond = FilePond.getInstance(document.getElementById('filepond'));
+            const files = pond.getFiles().map(file => file.file);
 
             if (files.length > 0) {
                 const channels = [];
@@ -94,6 +147,7 @@
                 processFile(0, files, channels, totalSize);
             }
         }
+
 
         function combineAndExport(channels, totalSize) {
             const combinedData = new Float32Array(totalSize);
