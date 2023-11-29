@@ -11,13 +11,35 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
 </head>
+<style>
+    #progress-container {
+        width: 100%;
+        background-color: #f1f1f1;
+        border: 1px solid #d3d3d3;
+        border-radius: 5px;
+        padding: 10px;
+        margin-top: 20px;
+    }
+
+    #progress-bar {
+        width: 0;
+        height: 30px;
+        background-color: #4caf50;
+        border-radius: 5px;
+        line-height: 30px;
+        color: white;
+        text-align: center;
+    }
+</style>
 
 <body style="padding: 10px;">
     <div class="filepond" id="filepond"></div><br>
     <div id="fileDetails" class="alert alert-primary" role="alert"></div><br>
-    <div id="fileSize" class="text-success"></div><br>
-    <div id="fileCount" class="text-dark"></div><br>
-    <div id="progress"></div><br>
+    <div id="progress-container">
+        <p class="text-dark">Progress</p>
+        <div id="progress-bar" class="text-dark">0%</div>
+        <div id="fileSize" class="text-success mt-1"></div>
+    </div><br>
 
     <!-- เพิ่มส่วนที่จะแสดงข้อมูล header -->
     <!-- <div id="binHeaderDetails" class="alert alert-info" role="alert"></div><br> -->
@@ -99,8 +121,6 @@
                 }
             });
 
-
-
             // เพิ่มตัวแปรเพื่อเก็บรายละเอียดของไฟล์ที่ถูกลบ
             // let deletedFileInfo = {};
 
@@ -133,9 +153,6 @@
             //     }
             // });
 
-
-
-
             // เพิ่มฟังก์ชันสำหรับลบรายละเอียดที่เกี่ยวข้องตามไฟล์ที่ถูกลบ
             function removeDisplayDetails(fileKey) {
                 const detailsContainer = document.getElementById('fileDetails');
@@ -151,8 +168,6 @@
                 // ลบ fileKey ออกจาก displayedFiles
                 displayedFiles.delete(fileKey);
             }
-
-
         });
 
         async function calculateStartOffset(file, files) {
@@ -183,8 +198,6 @@
 
             return Promise.all(promises).then(() => totalSize);
         }
-
-
 
         function readFileAsArrayBuffer(file) {
             return new Promise((resolve, reject) => {
@@ -238,20 +251,18 @@
             }
         }
 
-
-
-
-
         let binArray = null;
+        const MAX_SIZE_MB = 4;
 
         function updateProgress(totalSize) {
-            const progressContainer = document.getElementById('progress');
+            const progressContainer = document.getElementById('progress-bar');
             const fileSizeContainer = document.getElementById('fileSize');
 
             if (binArray !== null && binArray !== undefined && totalSize !== 0) {
-                let binArray_per = (binArray.length / (4 * 1024 * 1024)) * 100;
+                let binArray_per = (binArray.length / (MAX_SIZE_MB * 1024 * 1024)) * 100;
                 console.log(binArray_per);
-                progressContainer.innerHTML = `Progress: ${binArray_per.toFixed(2)}%`;
+                progressContainer.style.width = `${binArray_per.toFixed(2)}%`;
+                progressContainer.innerHTML = `${binArray_per.toFixed(2)}%`;
 
                 fileSizeContainer.innerHTML = `Combined bin file size: ${formatBytes(binArray.length) + " MB"}`;
             } else {
@@ -259,6 +270,18 @@
             }
         }
 
+        // Function to format bytes into human-readable format
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
 
         function processFile(index, files, channels, totalSize) {
             if (index < files.length) {
@@ -305,7 +328,6 @@
                 }
             }
         }
-
 
         function processWavFiles() {
             const pond = FilePond.getInstance(document.getElementById('filepond'));
